@@ -22,8 +22,8 @@ common shared
 library
     import:           shared
     hs-source-dirs:   src
-    exposed-modules:  MyLib
-    build-depends:    time
+    exposed-modules:  TC.Net
+    build-depends:    aeson, containers, text, time
 
 executable tc-server
     import: shared
