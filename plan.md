@@ -182,3 +182,46 @@ Goal of the scheduler is to, given the needs of an instance, and a list of live 
 1. If a volume pins an instance to a node, instance must be placed on that node.
 2. Node is only eligible if its free CPUs and memory can accommodate the requirements
 3. From the eligible nodes, prefer the one with the most memory (then CPUs) left AFTER placement. Tie break by node name if needed.
+
+
+### API
+
+The API is a servant API type defined in `TC.API`. Both server and the client derive from the same type ensuring consistency.
+
+See `TC.Server` for server implementation. Rough server notes:
+
+* atomic snapshots: save function writes to `filename.tmp` and then renames it to `filename` to make sure a crash doesn't leave a partially written or corrupt file.
+
+* heartbeat events are not persisted to disk as they happen every 2 seconds and don't add anything meaningful to the long-term state
+
+
+Using/testing the server:
+
+In one terminal, start the server:
+
+```bash
+cabal run tc-server -- --port 8080 --state state.json
+```
+
+Then curl:
+
+```
+$ export U=http://localhost:8080
+
+$ curl -X POST $U/nodes -H 'Content-Type: application/json' -d '{"name":"a","addr":"192.168.64.2","wgKey":"AAAA=","cpus":4,"memMb":4096}'
+
+{"subnet":1}
+
+                                       
+$ curl -X POST $U/volumes -H 'Content-Type: application/json' -d '{"sizeGb":1,"node":"a"}'
+{"id":"v-1","sizeGb":1,"node":"a"}
+
+$ curl -X POST $U/instances -H 'Content-Type: application/json' -d '{"image":"nginx","cmd":[],"cpus":1,"memMb":256,"mounts":[{"volume":"v-1","path":"/data"}]}'
+{"id":"i-2","spec":{"image":"nginx","cmd":[],"cpus":1,"memMb":256,"mounts":[{"volume":"v-1","path":"/data"}]},"placement":null,"running":false}
+
+$ curl $U/nodes/a/desired
+{"instances":{},"volumes":{"v-1":1},"peers":[{"key":"BBBB=","endpoint":"192.168.64.3:51820","subnet":2}]}
+
+$ cat state.json
+{"nodes":{"a":{"name":"a","addr":"192.168.64.2","wgKey":"AAAA=","subnet":1,"cpus":4,"memMb":4096,"lastSeen":"2026-10-08T13:37:14.584958Z","running":[]},"b":{"name":"b","addr":"192.168.64.3","wgKey":"BBBB=","subnet":2,"cpus":4,"memMb":4096,"lastSeen":"2026-10-08T13:40:58.799571Z","running":[]}},"instances":{"i-2":{"id":"i-2","spec":{"image":"nginx","cmd":[],"cpus":1,"memMb":256,"mounts":[{"volume":"v-1","path":"/data"}]},"placement":null}},"volumes":{"v-1":{"id":"v-1","sizeGb":1,"node":"a"}},"nextId":3}
+```

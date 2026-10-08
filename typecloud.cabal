@@ -16,7 +16,7 @@ build-type:         Simple
 
 common shared
     default-language: GHC2021
-    ghc-options:      -Wall -Wno-name-shadowing
+    ghc-options:      -Wall -Wno-name-shadowing -threaded
     build-depends:    base >=4.16 && <5
 
 library
@@ -28,13 +28,17 @@ library
                       TC.Scheduler
                       TC.Cluster
                       TC.Reconcile
-    build-depends:    aeson, containers, http-api-data, text, time
+                      TC.API
+                      TC.Server
+    build-depends:    aeson, bytestring, containers, directory, http-api-data, servant,
+                      servant-server, servant-client, text, time, wai, warp
 
 executable tc-server
     import: shared
+    ghc-options: -threaded
     hs-source-dirs: app
     main-is:          Server.hs
-    build-depends: typecloud
+    build-depends: optparse-applicative, typecloud, warp
 
 executable tc-agent
     import: shared
