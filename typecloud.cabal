@@ -23,7 +23,9 @@ library
     import:           shared
     hs-source-dirs:   src
     exposed-modules:  TC.Net
-    build-depends:    aeson, containers, text, time
+                      TC.Json
+                      TC.Types
+    build-depends:    aeson, containers, http-api-data, text, time
 
 executable tc-server
     import: shared
