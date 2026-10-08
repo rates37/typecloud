@@ -172,3 +172,13 @@ Object store has it's own trivial API too.
 - `TC.Server`: `MVar Cluster` to hold current state, HTTP handlers, etc.
 - `TC.Agent.Backend`: Implements the apply functions to enact `Action`s
 - `TC.ObjStore`: Implements the object store backend on node's local disk
+
+## Implementation Notes
+
+### Scheduler
+
+Goal of the scheduler is to, given the needs of an instance, and a list of live nodes with their free capacity, select the most appropriate node to place the instance on.
+
+1. If a volume pins an instance to a node, instance must be placed on that node.
+2. Node is only eligible if its free CPUs and memory can accommodate the requirements
+3. From the eligible nodes, prefer the one with the most memory (then CPUs) left AFTER placement. Tie break by node name if needed.
