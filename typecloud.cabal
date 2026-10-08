@@ -25,6 +25,9 @@ library
     exposed-modules:  TC.Net
                       TC.Json
                       TC.Types
+                      TC.Scheduler
+                      TC.Cluster
+                      TC.Reconcile
     build-depends:    aeson, containers, http-api-data, text, time
 
 executable tc-server

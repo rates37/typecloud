@@ -65,7 +65,7 @@ data InstanceSpec = InstanceSpec
     specCmd :: [Text],
     specCpus :: Int,
     specMemMb :: Int,
-    specVolumes :: [VolumeMount]
+    specMounts :: [VolumeMount]
   }
   deriving (Eq, Show)
 
