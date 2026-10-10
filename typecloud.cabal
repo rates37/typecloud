@@ -30,8 +30,12 @@ library
                       TC.Reconcile
                       TC.API
                       TC.Server
-    build-depends:    aeson, bytestring, containers, directory, http-api-data, servant,
-                      servant-server, servant-client, text, time, wai, warp
+                      TC.Client
+                      TC.Agent.Backend
+                      TC.Agent.Commands
+                      TC.Agent.Parse
+    build-depends:    aeson, bytestring, containers, directory, filepath, http-api-data, http-client, http-types,
+                      servant, servant-server, servant-client, text, time, typed-process, wai, warp
 
 executable tc-server
     import: shared
@@ -44,7 +48,7 @@ executable tc-agent
     import: shared
     hs-source-dirs: app
     main-is: Agent.hs
-    build-depends: typecloud
+    build-depends: containers, http-client, http-types, optparse-applicative, servant-client, text, typecloud
 
 
 executable tc
