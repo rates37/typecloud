@@ -62,7 +62,7 @@ executable tc-objstore
     import: shared
     hs-source-dirs: app
     main-is: ObjStore.hs
-    build-depends: typecloud
+    build-depends: typecloud, warp, optparse-applicative, directory
 
 test-suite spec
     import: shared
