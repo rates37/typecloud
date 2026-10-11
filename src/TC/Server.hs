@@ -105,7 +105,7 @@ handlers env =
       r <- liftIO . modifyMVar (envState env) $ \c -> case deleteInstance iid c of
         Nothing -> pure (c, False)
         Just c' -> save env c' >> pure (c', True)
-      if r then pure NoContent else throwError err404
+      if r then pure NoContent else throwError err404 {errBody = BL.fromStrict (TE.encodeUtf8 ("no instance " <> unInstanceId iid <> " found"))}
 
     createVolumeH nv = mutate env True (\now c -> createVolume now nv c)
     listVolumesH = query env (\_ c -> Map.elems (cVolumes c))
