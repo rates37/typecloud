@@ -79,7 +79,7 @@ createVolume now nv c = do
   node <- case nvolNode nv of
     Just n
       | n `Map.member` cNodes c -> Right n
-      | otherwise -> Left ("unkonwn node " <> unNodeId n)
+      | otherwise -> Left ("unknown node " <> unNodeId n)
     Nothing -> case sortOn volumeCount (filter (isAlive now) (Map.elems (cNodes c))) of
       [] -> Left "no live nodes"
       (n : _) -> Right (nName n)
