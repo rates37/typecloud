@@ -96,6 +96,6 @@ main = do
         die' e = do
             hPutStrLn stderr (case e of
                 FailureResponse _ r -> "Error: " <> BL.unpack (responseBody r)
-                _ -> "Error: " <> show e
+                _ -> "Error: " <> describeClientError e
                 )
             exitFailure

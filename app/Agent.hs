@@ -62,13 +62,13 @@ main = do
                 Right (NodeConfig subnet) -> do
                     bSetup backend subnet
                     say ("registered as " <> T.unpack (name o) <> ", subnet " <> show subnet)
-                Left e -> say ("registration failed: " <> show e) >> threadDelay 2000000 >> register
+                Left e -> say ("registration failed: " <> describeClientError e) >> threadDelay 2000000 >> register
         
         tick = do
             r <- call (desiredC nid)
             case r of
                 Left (FailureResponse _ resp) | responseStatusCode resp == notFound404 -> register
-                Left e -> say ("cannot reach control plane! (carrying on): " <> show e)
+                Left e -> say ("cannot reach control plane! (carrying on): " <> describeClientError e)
                 Right desired -> do
                     actual <- bObserve backend
                     forM_ (reconcile desired actual) $ \act -> do
