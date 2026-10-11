@@ -167,8 +167,8 @@ data NodeView = NodeView
     nviewSubnet :: Text,
     nviewCpus :: Int,
     nviewMemMb :: Int,
-    nviewAlice :: Bool,
-    nviewInstnaces :: Int
+    nviewAlive :: Bool,
+    nviewInstances :: Int
   }
   deriving (Eq, Show)
 

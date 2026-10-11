@@ -34,6 +34,7 @@ library
                       TC.Agent.Backend
                       TC.Agent.Commands
                       TC.Agent.Parse
+                      TC.ObjStore
     build-depends:    aeson, bytestring, containers, directory, filepath, http-api-data, http-client, http-types,
                       servant, servant-server, servant-client, text, time, typed-process, wai, warp
 
@@ -55,7 +56,7 @@ executable tc
     import: shared
     hs-source-dirs: app
     main-is: Cli.hs
-    build-depends: typecloud
+    build-depends: aeson, bytestring, containers, http-client, optparse-applicative, servant-client, text, typecloud
 
 executable tc-objstore
     import: shared
