@@ -10,11 +10,11 @@ Listing bugs to fix here:
 
 [ ] if key collides with directory, returns a 500
 
-[ ] HEAD returns 404 even for existing keys
+[x] HEAD returns 404 even for existing keys
 
-[ ] DELETE leaves empty directories behind
+[x] DELETE leaves empty directories behind
 
-[ ] missing request body size limit / auth
+[x] missing request body size limit / auth
 
 [ ] `PUT /buckets/b/key/` (trailing slash) returns 400 bad path, maybe remove trailing slash?
 
