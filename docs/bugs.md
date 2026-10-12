@@ -24,7 +24,7 @@ Listing bugs to fix here:
 
 [ ] after server restart, all nodes appear alive for up to 10s even if they are dead
 
-[ ] inconsistent error status for unknown IDs / other errors
+[x] inconsistent error status for unknown IDs / other errors
 
 [ ] add request logging to server
 

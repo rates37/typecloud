@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | The control plane state machine. Every state transition should be
--- a pure function `Cluster -> Cluster`, or `Either Text (a, Cluster)`
+-- a pure function `Cluster -> Cluster`, or `Either ClusterError (a, Cluster)`
 -- if it can be rejected.
 module TC.Cluster
-  ( emptyCluster,
+  ( ClusterError (..),
+    emptyCluster,
     deadAfter,
     isAlive,
     registerNode,
@@ -43,14 +44,23 @@ deadAfter = 10
 isAlive :: UTCTime -> Node -> Bool
 isAlive now n = now `diffUTCTime` nLastSeen n < deadAfter
 
+-- | Why a cluster state transition was refused. `mutate` in TC.Server turns each into
+-- an HTTP status
+data ClusterError
+  = NotFound Text -- 404: id not found
+  | Conflict Text -- 409: conflicting with the current state
+  | Invalid Text -- 400: request itself is wrong/invalid
+  | Unavailable Text -- 503: valid request but service is unable to perform it
+  deriving (Eq, Show)
+
 -- ! Nodes:
 
 -- | Should be idempotent: re -registering a node maintains the same subnet
-registerNode :: UTCTime -> NodeReg -> Cluster -> Either Text (NodeConfig, Cluster)
+registerNode :: UTCTime -> NodeReg -> Cluster -> Either ClusterError (NodeConfig, Cluster)
 registerNode now r c = do
   subnet <- case Map.lookup (nrName r) (cNodes c) of
     Just old -> Right (nSubnet old)
-    Nothing -> maybe (Left "no subnets available") Right (allocSubnet (map nSubnet (Map.elems (cNodes c))))
+    Nothing -> maybe (Left $ Unavailable "no subnets available") Right (allocSubnet (map nSubnet (Map.elems (cNodes c))))
   let node =
         Node
           { nName = nrName r,
@@ -73,15 +83,15 @@ heartbeat now nid running c = do
 
 -- ! Volumes:
 
-createVolume :: UTCTime -> NewVolume -> Cluster -> Either Text (Volume, Cluster)
+createVolume :: UTCTime -> NewVolume -> Cluster -> Either ClusterError (Volume, Cluster)
 createVolume now nv c = do
   check (nvolSizeGb nv >= 1 && nvolSizeGb nv <= 100) "vol size must be in 1..100 GB"
   node <- case nvolNode nv of
     Just n
       | n `Map.member` cNodes c -> Right n
-      | otherwise -> Left ("unknown node " <> unNodeId n)
+      | otherwise -> Left (NotFound $ "no node " <> unNodeId n <> " found")
     Nothing -> case sortOn volumeCount (filter (isAlive now) (Map.elems (cNodes c))) of
-      [] -> Left "no live nodes"
+      [] -> Left $ Unavailable "no live nodes"
       (n : _) -> Right (nName n)
   let vid = VolumeId ("v-" <> T.pack (show (cNextId c)))
       vol = Volume vid (nvolSizeGb nv) node
@@ -89,17 +99,17 @@ createVolume now nv c = do
   where
     volumeCount n = length [() | v <- Map.elems (cVolumes c), vNode v == nName n]
 
-deleteVolume :: VolumeId -> Cluster -> Either Text Cluster
+deleteVolume :: VolumeId -> Cluster -> Either ClusterError Cluster
 deleteVolume vid c
-  | vid `Map.notMember` cVolumes c = Left $ "no volume " <> unVolumeId vid <> " found"
-  | vid `elem` attached = Left $ "volume " <> unVolumeId vid <> " is attached to an instance"
+  | vid `Map.notMember` cVolumes c = Left $ NotFound $ "no volume " <> unVolumeId vid <> " found"
+  | vid `elem` attached = Left $ Conflict $ "volume " <> unVolumeId vid <> " is attached to an instance"
   | otherwise = Right c {cVolumes = Map.delete vid (cVolumes c)}
   where
     attached = [vmVolume m | i <- Map.elems (cInstances c), m <- specMounts (iSpec i)]
 
 -- ! Instances:
 
-createInstance :: UTCTime -> InstanceSpec -> Cluster -> Either Text (Instance, Cluster)
+createInstance :: UTCTime -> InstanceSpec -> Cluster -> Either ClusterError (Instance, Cluster)
 createInstance now spec c = do
   check (specCpus spec >= 1) "instance must have at least 1 CPU"
   check (specMemMb spec >= 256) "instance must have at least 256MB memory"
@@ -118,17 +128,17 @@ deleteInstance iid c
 -- | If an instance mounts volumes, it must run where the volumes are located
 -- All of its volumes must be on the same node
 -- Each volume must only be mounted once
-pinOf :: Cluster -> InstanceSpec -> Either Text (Maybe NodeId)
+pinOf :: Cluster -> InstanceSpec -> Either ClusterError (Maybe NodeId)
 pinOf c spec = do
   let vids = map vmVolume (specMounts spec)
   check (length vids == length (dedupe vids)) "duplicate volumes in instance spec"
-  vols <- mapM (\v -> maybe (Left ("No such volume " <> unVolumeId v)) Right (Map.lookup v (cVolumes c))) vids
+  vols <- mapM (\v -> maybe (Left (NotFound $ "no volume " <> unVolumeId v <> " found")) Right (Map.lookup v (cVolumes c))) vids
   let others = [vmVolume m | i <- Map.elems (cInstances c), m <- specMounts (iSpec i)]
-  check (all (`notElem` others) vids) "volume already attached to other instance"
+  ensure (Conflict "volume already attached to other instance") (all (`notElem` others) vids)
   case dedupe (map vNode vols) of
     [] -> Right Nothing
     [n] -> Right (Just n)
-    _ -> Left "volumes are on different nodes"
+    _ -> Left $ Conflict "volumes are on different nodes"
   where
     dedupe :: (Ord a) => [a] -> [a]
     dedupe = Set.toList . Set.fromList
@@ -215,5 +225,8 @@ instanceViews now c = map view (Map.elems (cInstances c))
 
 -- Heplers:
 
-check :: Bool -> Text -> Either Text ()
-check ok msg = if ok then Right () else Left msg
+check :: Bool -> Text -> Either ClusterError ()
+check ok msg = ensure (Invalid msg) ok
+
+ensure :: ClusterError -> Bool -> Either ClusterError ()
+ensure err ok = if ok then Right () else Left err

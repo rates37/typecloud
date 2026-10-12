@@ -39,7 +39,7 @@ newEnv snap = do
         then pure emptyCluster
         else
           eitherDecodeFileStrict f >>= \r -> case r of
-            Left e -> fail ("invalid or corrupt snapshot" <> f <> ": " <> e)
+            Left e -> fail ("invalid or corrupt snapshot " <> f <> ": " <> e)
             Right c0 -> pure c0 {cNodes = Map.map (\n -> n {nLastSeen = now}) (cNodes c0)}
   Env <$> newMVar c <*> pure snap
 
@@ -50,8 +50,8 @@ save env c = case envSnapshot env of
     BL.writeFile (f <> ".tmp") (encode c)
     renameFile (f <> ".tmp") f -- ensures the file is written atomically to never corrupt it
 
--- | Run a pure transition under the lock 'Left' becomes HTTP 400
-mutate :: Env -> Bool -> (UTCTime -> Cluster -> Either Text (a, Cluster)) -> Handler a
+-- | Run a pure transition under the lock. Each ClusterError becomes its own HTTP status
+mutate :: Env -> Bool -> (UTCTime -> Cluster -> Either ClusterError (a, Cluster)) -> Handler a
 mutate env persist f = do
   now <- liftIO getCurrentTime
   r <- liftIO . modifyMVar (envState env) $ \c -> case f now c of
@@ -59,14 +59,20 @@ mutate env persist f = do
     Right (a, c') -> do
       if persist then save env c' else pure ()
       pure (c', Right a)
-  either (throwError . bad) pure r
+  either (throwError . toErr) pure r
   where
-    bad e = err400 {errBody = BL.fromStrict (TE.encodeUtf8 e)}
+    toErr (NotFound e) = withBody err404 e
+    toErr (Conflict e) = withBody err409 e
+    toErr (Invalid e) = withBody err400 e
+    toErr (Unavailable e) = withBody err503 e
 
 query :: Env -> (UTCTime -> Cluster -> a) -> Handler a
 query env f = liftIO $ do
   now <- getCurrentTime
   f now <$> readMVar (envState env)
+
+withBody :: ServerError -> Text -> ServerError
+withBody err msg = err {errBody = BL.fromStrict (TE.encodeUtf8 msg)}
 
 handlers :: Env -> Server API
 handlers env =
@@ -85,7 +91,7 @@ handlers env =
 
     listNodesH = query env nodeViews
 
-    desiredH nid = query env (\_ -> desiredFor nid) >>= maybe (throwError err404) pure
+    desiredH nid = query env (\_ -> desiredFor nid) >>= maybe (throwError (withBody err404 ("no node " <> unNodeId nid <> " found"))) pure
 
     heartbeatH nid (Heartbeat running) = do
       -- Not persisted to disk as it happens every couple of seconds per node and adds nothing meaningful
@@ -94,7 +100,7 @@ handlers env =
         modifyMVar (envState env) $ \c -> pure $ case heartbeat now nid running c of
           Nothing -> (c, False)
           Just c' -> (c', True)
-      if r then pure NoContent else throwError err404
+      if r then pure NoContent else throwError (withBody err404 ("no node " <> unNodeId nid <> " found"))
 
     createInstanceH spec = do
       i <- mutate env True (\now c -> createInstance now spec c)
@@ -105,7 +111,7 @@ handlers env =
       r <- liftIO . modifyMVar (envState env) $ \c -> case deleteInstance iid c of
         Nothing -> pure (c, False)
         Just c' -> save env c' >> pure (c', True)
-      if r then pure NoContent else throwError err404 {errBody = BL.fromStrict (TE.encodeUtf8 ("no instance " <> unInstanceId iid <> " found"))}
+      if r then pure NoContent else throwError (withBody err404 ("no instance " <> unInstanceId iid <> " found"))
 
     createVolumeH nv = mutate env True (\now c -> createVolume now nv c)
     listVolumesH = query env (\_ c -> Map.elems (cVolumes c))
