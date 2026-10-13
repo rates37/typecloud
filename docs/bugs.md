@@ -30,4 +30,4 @@ Listing bugs to fix here:
 
 ## CLI Issues:
 
-[ ] `tc ps` columns misaligned, need to calculate width dynamically
+[x] `tc ps` columns misaligned, need to calculate width dynamically
