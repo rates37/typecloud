@@ -35,7 +35,7 @@ import TC.Scheduler
 import TC.Types
 
 emptyCluster :: Cluster
-emptyCluster = Cluster Map.empty Map.empty Map.empty 1
+emptyCluster = Cluster Map.empty Map.empty Map.empty 1 Set.empty
 
 -- | A node that has not heartbeated for this amount of time is considered dead
 deadAfter :: NominalDiffTime
@@ -72,14 +72,14 @@ registerNode now r c = do
             nLastSeen = now,
             nRunning = Set.empty
           }
-  pure (NodeConfig subnet, c {cNodes = Map.insert (nName node) node (cNodes c)})
+  pure (NodeConfig subnet, c {cNodes = Map.insert (nName node) node (cNodes c), cUnconfirmed = Set.delete (nName node) (cUnconfirmed c)})
 
 -- | 'Nothing' means never observed, the agent should re-register
 heartbeat :: UTCTime -> NodeId -> [InstanceId] -> Cluster -> Maybe Cluster
 heartbeat now nid running c = do
   n <- Map.lookup nid (cNodes c)
   let n' = n {nLastSeen = now, nRunning = Set.fromList running}
-  pure c {cNodes = Map.insert nid n' (cNodes c)}
+  pure c {cNodes = Map.insert nid n' (cNodes c), cUnconfirmed = Set.delete nid (cUnconfirmed c)}
 
 -- ! Volumes:
 
@@ -167,9 +167,10 @@ candidates now c =
   [ Candidate (nName n) (nCpus n - cpus) (nMemMb n - mem)
     | n <- Map.elems (cNodes c),
       isAlive now n,
+      nName n `Set.notMember` cUnconfirmed c,
       let placed = placedOn (nName n) c
-          cpus = sum (map (specCpus . iSpec) placed)
-          mem = sum (map (specMemMb . iSpec) placed)
+          cpus = sum $ map (specCpus . iSpec) placed
+          mem = sum $ map (specMemMb . iSpec) placed
   ]
 
 placedOn :: NodeId -> Cluster -> [Instance]
@@ -199,6 +200,14 @@ desiredFor nid c = do
         dPeers = [Peer (nWgKey n) (nAddr n <> ":51820") (nSubnet n) | n <- Map.elems (cNodes c), nName n /= nid]
       }
 
+-- | 'Unknown' until the node heartbeats after startup. After that, alive or dead
+-- by its last heartbeat
+nodeStatus :: UTCTime -> Cluster -> Node -> NodeStatus
+nodeStatus now c n
+  | nName n `Set.member` cUnconfirmed c = Unknown
+  | isAlive now n = Alive
+  | otherwise = Dead
+
 nodeViews :: UTCTime -> Cluster -> [NodeView]
 nodeViews now c =
   [ NodeView
@@ -207,7 +216,7 @@ nodeViews now c =
       (subnetCidr (nSubnet n))
       (nCpus n)
       (nMemMb n)
-      (isAlive now n)
+      (nodeStatus now c n)
       (length (placedOn (nName n) c))
     | n <- Map.elems (cNodes c)
   ]

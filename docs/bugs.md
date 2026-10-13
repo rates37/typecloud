@@ -22,7 +22,7 @@ Listing bugs to fix here:
 
 [ ] long running operations block heartbeats, eg `podman run` pulls missing image synchronously causing node to appear dead. move heartbeats to new thread
 
-[ ] after server restart, all nodes appear alive for up to 10s even if they are dead
+[x] after server restart, all nodes appear alive for up to 10s even if they are dead
 
 [x] inconsistent error status for unknown IDs / other errors
 

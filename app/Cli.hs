@@ -74,6 +74,12 @@ psRow i = [unInstanceId (iviewId i), specImage (iviewSpec i), node, ip, status]
       | iviewRunning i = "running"
       | otherwise = "not running"
 
+-- | How a node's status shows in the ALIVE column
+statusText :: NodeStatus -> T.Text
+statusText Alive = "yes"
+statusText Dead = "no"
+statusText Unknown = "unknown"
+
 -- | One row of `tc nodes` output
 nodeRow :: NodeView -> [T.Text]
 nodeRow n =
@@ -82,7 +88,7 @@ nodeRow n =
     nviewSubnet n,
     T.pack (show $ nviewCpus n),
     T.pack (show $ nviewMemMb n),
-    if nviewAlive n then "yes" else "no",
+    statusText (nviewStatus n),
     T.pack (show $ nviewInstances n)
   ]
 

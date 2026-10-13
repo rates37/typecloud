@@ -40,7 +40,13 @@ newEnv snap = do
         else
           eitherDecodeFileStrict f >>= \r -> case r of
             Left e -> fail ("invalid or corrupt snapshot " <> f <> ": " <> e)
-            Right c0 -> pure c0 {cNodes = Map.map (\n -> n {nLastSeen = now}) (cNodes c0)}
+            Right c0 ->
+              pure
+                c0
+                  { cNodes = Map.map (\n -> n {nLastSeen = now}) (cNodes c0),
+                    cUnconfirmed = Map.keysSet (cNodes c0)
+                  }
+
   Env <$> newMVar c <*> pure snap
 
 save :: Env -> Cluster -> IO ()

@@ -112,7 +112,8 @@ data Cluster = Cluster
   { cNodes :: Map NodeId Node,
     cInstances :: Map InstanceId Instance,
     cVolumes :: Map VolumeId Volume,
-    cNextId :: Int
+    cNextId :: Int,
+    cUnconfirmed :: Set NodeId
   }
   deriving (Eq, Show)
 
@@ -161,13 +162,16 @@ data NewVolume = NewVolume
   }
   deriving (Eq, Show)
 
+data NodeStatus = Unknown | Alive | Dead
+  deriving (Eq, Show)
+
 data NodeView = NodeView
   { nviewName :: NodeId,
     nviewAddr :: Text,
     nviewSubnet :: Text,
     nviewCpus :: Int,
     nviewMemMb :: Int,
-    nviewAlive :: Bool,
+    nviewStatus :: NodeStatus,
     nviewInstances :: Int
   }
   deriving (Eq, Show)
@@ -194,5 +198,6 @@ deriveJSON jsonOpts ''Peer
 deriveJSON jsonOpts ''DesiredInstance
 deriveJSON jsonOpts ''Desired
 deriveJSON jsonOpts ''NewVolume
+deriveJSON jsonOpts ''NodeStatus
 deriveJSON jsonOpts ''NodeView
 deriveJSON jsonOpts ''InstanceView
