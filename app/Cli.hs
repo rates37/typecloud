@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import Control.Monad (forM_)
 import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.List (transpose)
 import Data.Text qualified as T
@@ -15,7 +14,6 @@ import System.IO (hPutStrLn, stderr)
 import TC.Client
 import TC.Net (renderIPv4)
 import TC.Types
-import Text.Printf (printf)
 
 data Cmd
   = Nodes
@@ -76,6 +74,18 @@ psRow i = [unInstanceId (iviewId i), specImage (iviewSpec i), node, ip, status]
       | iviewRunning i = "running"
       | otherwise = "not running"
 
+-- | One row of `tc nodes` output
+nodeRow :: NodeView -> [T.Text]
+nodeRow n =
+  [ unNodeId (nviewName n),
+    nviewAddr n,
+    nviewSubnet n,
+    T.pack (show $ nviewCpus n),
+    T.pack (show $ nviewMemMb n),
+    if nviewAlive n then "yes" else "no",
+    T.pack (show $ nviewInstances n)
+  ]
+
 main :: IO ()
 main = do
   (url, c) <- execParser $ info ((,) <$> serverOpt <*> cmd <**> helper) (progDesc "TypeCloud CLI :)")
@@ -87,16 +97,19 @@ main = do
       go act k = runClientM act env >>= either die' k
   case c of
     Nodes -> go listNodesC $ \ns -> do
-      printf "%-12s %-16s %-16s %-5s %-7s %-6s %s\n" ("NAME" :: String) ("ADDR" :: String) ("SUBNET" :: String) ("CPUS" :: String) ("MEM" :: String) ("ALIVE" :: String) ("INST" :: String)
-      forM_ ns $ \n -> printf "%-12s %-16s %-16s %-5d %-7d %-6s %d\n" (T.unpack (unNodeId (nviewName n))) (T.unpack (nviewAddr n)) (T.unpack (nviewSubnet n)) (nviewCpus n) (nviewMemMb n) (if nviewAlive n then "yes" :: String else "no" :: String) (nviewInstances n)
+      mapM_ T.putStrLn $
+        table $
+          ["NAME", "ADDR", "SUBNET", "CPUS", "MEM", "ALIVE", "INST"] : map nodeRow ns
     Ps -> go listInstancesC $ \is ->
       mapM_ T.putStrLn $ table $ ["ID", "IMAGE", "NODE", "IP", "STATUS"] : map psRow is
     Run s -> go (createInstanceC s) $ \i -> T.putStrLn (unInstanceId (iviewId i))
     Rm i -> go (deleteInstanceC i) $ \_ -> pure ()
     VolCreate gb n -> go (createVolumeC (NewVolume gb n)) $ \v ->
       T.putStrLn (unVolumeId (vId v) <> " on " <> unNodeId (vNode v))
-    VolLs -> go listVolumesC $ \vs -> forM_ vs $ \v ->
-      printf "%-8s %3d GB  %s\n" (T.unpack (unVolumeId (vId v))) (vSizeGb v) (T.unpack (unNodeId (vNode v)))
+    VolLs -> go listVolumesC $ \vs ->
+      mapM_ T.putStrLn $
+        table $
+          ["ID", "SIZE", "NODE"] : [[unVolumeId (vId v), T.pack (show (vSizeGb v)) <> " GB", unNodeId (vNode v)] | v <- vs]
     VolRm v -> go (deleteVolumeC v) $ \_ -> pure ()
   where
     serverOpt = strOption (long "server" <> short 's' <> value "http://localhost:8080" <> showDefault <> help "control plane URL")
