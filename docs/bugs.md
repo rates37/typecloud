@@ -31,3 +31,11 @@ Listing bugs to fix here:
 ## CLI Issues:
 
 [x] `tc ps` columns misaligned, need to calculate width dynamically
+
+## Other issues:
+
+[ ] Need a readme
+
+[ ] Document how to set up a cluster, plus VM approach
+
+[ ] Implement a cli command to shell into an instance
