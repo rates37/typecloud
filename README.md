@@ -58,23 +58,72 @@ cabal test
 
 ## Quick Start:
 
-Run tests:
+Bring up a control plane and two nodes on a network. Each command below is shown with its default flags. The `--help` flag can be used to see all available options.
 
 ```bash
-cabal test
+## On the control plane machine: start the server, logging the state to a file:
+cabal run tc-server -- --state /var/lib/typecloud/state.json
+
+## on each node, as root:
+# start the agent with a unique name and a reachable address:
+cabal run tc-agent -- --server https://CONTROL_PLANE:8080 --name n1 --addr 192.168.1.11
+cabal run tc-agent -- --server https://CONTROL_PLANE:8080 --name n2 --addr 192.168.1.12
+
+## from any machine that can reach the control plane:
+# list all nodes and their status:
+cabal run tc -- --server https://CONTROL_PLANE:8080 nodes
+# start up an instance
+cabal run tc -- --server https://CONTROL_PLANE:8080 run <TODO>
+# see all running instances:
+cabal run tc -- --server https://CONTROL_PLANE:8080 ps
 ```
 
-Run executables:
+You can try the system without root and without real containers. You can just run the agent with `--dry-run`. It will log every action it would take without actually running them.
+
+## Running each component:
+
+### tc-server:
 
 ```bash
-cabal run tc  # cli
-cabal run tc-objstore  # objstore
-cabal run tc-server  # server
-cabal run tc-agent  # agent
+cabal run tc-server -- [--port 8080] [--state FILE]
 ```
+
+| Flag      | Default | Explanation                                                                                                                                                                                                             |
+| --------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--port`  | 8080    | The port for the HTTP API                                                                                                                                                                                               |
+| `--state` | none    | The JSON snapshot file. If provided, state is loaded from it at startup. If it is empty, the server starts with empty initial state. If this option is not provided, the state is in-memory only, and is not persisted. |
+
+### tc-agent:
+
+```bash
+sudo cabal run tc-agent -- [--name NAME] [--addr ADDR] [--dry-run]
+```
+
+| Flag          | Default              | Explanation                                                                             |
+| ------------- | -------------------- | --------------------------------------------------------------------------------------- |
+| `--name`      | required             | A unique node name. It should not change, and should be unique in the cloud             |
+| `--addr`      | required             | The address other nodes use to reach this node's WireGuard socket                       |
+| `--cpus`      | 2                    | CPUs this node can offer to instances                                                   |
+| `--mem-mb`    | 2048                 | Memory in MB this node can provide to instances                                         |
+| `--dry-run`   | false                | If set, the agent will log actions but not perform them                                 |
+| `--state-dir` | `/var/lib/typecloud` | The directory where the agent stores its WireGuard key, volume images, and mount points |
+
+On the first start, the agent creates a WireGuard key in `--state-dir`. It is kept across restarts, and registers with the server. If the server is down/unreachable, it re-attempts every two seconds.
 
 ## CLI Reference:
 
-## Control Plane HTTP API:
+Global options, placed before the subcommand:
 
-## Other Notes:
+| Option               | Default                 | Explanation                         |
+| -------------------- | ----------------------- | ----------------------------------- |
+| `-s`, `--server URL` | `http://localhost:8080` | The URL of the control plane server |
+
+| Command                             | Explanation                                                                                                                              |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `tc nodes`                          | List all nodes with address, subnet, CPUs, memory, status, and instance count                                                            |
+| `tc run IMAGE [CMD...]`             | Starts an instance. Options: `--cpus N` (default 1), `--mem MB` (default 256), `-v VOL:PATH` (repeatable). Prints the newest instance ID |
+| `tc ps`                             | Lists instances with ID, image, node, IP, and status                                                                                     |
+| `tc rm ID`                          | Deletes an instance. Its container is stopped on the node within a short period of time                                                  |
+| `tc volume-create GB [--node NAME]` | Creates a volume (limited to max 100GB). Without `--node`, it goes on the live node with the fewest volumes.                             |
+| `tc volume-ls`                      | Lists volumes with ID, size, and node.                                                                                                   |
+| `tc volume-rm ID`                   | Deletes a volume and its data. Refused if the volume is in use.                                                                          |
