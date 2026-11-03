@@ -127,3 +127,59 @@ Global options, placed before the subcommand:
 | `tc volume-create GB [--node NAME]` | Creates a volume (limited to max 100GB). Without `--node`, it goes on the live node with the fewest volumes.                             |
 | `tc volume-ls`                      | Lists volumes with ID, size, and node.                                                                                                   |
 | `tc volume-rm ID`                   | Deletes a volume and its data. Refused if the volume is in use.                                                                          |
+
+## Control Plane HTTP API
+
+All the nodes in the cluster and the CLI talk to the control plane over JSON. JSON field names are in lowerCamelCase. Fields with no values are left out.
+
+| Method and Path               | Caller | Body Type/In   | Response                                    |
+| ----------------------------- | ------ | -------------- | ------------------------------------------- |
+| `POST /nodes`                 | agent  | `NodeReg`      | `NodeConfig`: the node's subnet             |
+| `GET /nodes`                  | CLI    |                | `[NodeView]`                                |
+| `GET /nodes/:name/desired`    | agent  |                | `Desired`: what this node should be running |
+| `POST /nodes/:name/heartbeat` | agent  | `Heartbeat`    | `204`                                       |
+| `POST /instances`             | CLI    | `InstanceSpec` | `InstanceView`                              |
+| `GET /instances`              | CLI    |                | `[InstanceView]`                            |
+| `DELETE /instances/:id`       | CLI    |                | `204`                                       |
+| `POST /volumes`               | CLI    | `NewVolume`    | `Volume`                                    |
+| `GET /volumes`                | CLI    |                | `[Volume]`                                  |
+| `DELETE /volumes/:id`         | CLI    |                | `204`                                       |
+
+### Error Responses:
+
+| Status | Occurs when                                                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Request is invalid, e.g., CPUs below 1, memory below 256MB, volume size outside 1-100GB, duplicate volume in one instance                                  |
+| `404`  | An ID in the path doesn't exist, or referenced node/volume doesn't exist. Body contains details                                                            |
+| `409`  | Request conflicts with the current state, e.g., a volume is still attached, already mounted by another instance, or volume and instance on different nodes |
+| `503`  | Request is valid but can't be served right now. E.g., no live node for a new volume, no subnet left for new node, etc.                                     |
+
+### Example Payloads:
+
+Create an instance that mounts a volume:
+
+```json
+{
+  "image": "alpine",
+  "cmd": ["sleep", "3600"],
+  "cpus": 1,
+  "memMb": 256,
+  "mounts": [{ "volume": "v-1", "path": "/data" }]
+}
+```
+
+Node status as `GET /nodes` returns:
+
+```json
+{
+  "name": "n1",
+  "addr": "192.168.1.11",
+  "subnet": "10.100.1.0/24",
+  "cpus": 2,
+  "memMb": 2048,
+  "status": "Alive",
+  "instances": 1
+}
+```
+
+`status` is one of `Unknown`, `Alive` or `Dead`.
